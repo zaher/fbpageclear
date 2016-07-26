@@ -15,7 +15,9 @@ type
 
   TFBPageClear = class(TCustomApplication)
   protected
+    PageSize: Integer;
     procedure DoRun; override;
+    procedure ClearPage(vFileName: string; vPage: Int64);
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -28,37 +30,77 @@ procedure TFBPageClear.DoRun;
 var
   ErrorMsg: String;
   aParams: TStringList;
-  aPage: string;
+  aFileName, aPage: string;
 begin
+  PageSize := 4096;
+
+  ErrorMsg := CheckOptions('h', 'help');
+  if ErrorMsg <>'' then
+  begin
+    ShowException(Exception.Create(ErrorMsg));
+    Terminate;
+    Exit;
+  end;
+
+  if HasOption('h', 'help') or (ParamCount = 0) then
+  begin
+    WriteHelp;
+    Terminate;
+    Exit;
+  end;
+
   aParams:=TStringList.Create;
   try
     CheckOptions('', nil, nil, aParams, False);
+
     if aParams.Count > 0 then
-      aPage := aParams[0];
-
-    WriteLn(aPage);
-    // quick check parameters
-    ErrorMsg :=CheckOptions('h', 'help');
-    if ErrorMsg <>'' then begin
-      ShowException(Exception.Create(ErrorMsg));
-      Terminate;
-      Exit;
-    end;
-
-    // parse parameters
-    if HasOption('h', 'help') then begin
+      aFileName := aParams[0]
+    else
+    begin
+      WriteLn('Please define the file name.');
       WriteHelp;
-      Terminate;
-      Exit;
     end;
+
+    if aParams.Count > 1 then
+      aPage := aParams[1]
+    else
+    begin
+      WriteLn('Please define the page number.');
+      WriteHelp;
+    end;
+
+    WriteLn(aFileName + ' ' + aPage);
+
+    if HasOption('p', 'page') then
+    begin
+      PageSize := StrToInt(GetOptionValue('p', 'page'));
+    end;
+    WriteLn('Page Size:' + IntToStr(PageSize));
+
   finally
     aParams.Free;
   end;
-  { add your program here }
 
+  ClearPage(aFileName, StrToInt64(aPage));
   ReadLn();
-  // stop program loop
   Terminate;
+end;
+
+procedure TFBPageClear.ClearPage(vFileName: string; vPage: Int64);
+var
+  aFile:TFileStream;
+  offset: Int64;
+  i: Integer;
+begin
+  aFile := TFileStream.Create(vFileName, fmOpenReadWrite);
+  try
+    offset := vPage * PageSize;
+    aFile.Seek(offset, soBeginning);
+    for i := 0 to PageSize - 1 do
+      aFile.WriteByte(0);
+  finally
+    aFile.Free;
+  end;
 end;
 
 constructor TFBPageClear.Create(TheOwner: TComponent);
@@ -74,8 +116,7 @@ end;
 
 procedure TFBPageClear.WriteHelp;
 begin
-  { add your help code here }
-  writeln('Usage: ', ExeName, ' -h');
+  writeln('Usage: ', ExtractFileName(ExeName), ' filename pagenumber');
 end;
 
 var
