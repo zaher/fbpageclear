@@ -1,5 +1,17 @@
 program fbpageclear;
+{**
+> gfix -user sysdba -pass masterkey data.fdb -v -full
+database file appears corrupt ()
+-bad checksum
+-checksum error on database page 36813
 
+> fbpageclear.exe data.fdb 36813
+data.fdb 36813
+Page Size:4096
+Offset: 150786048
+Done.
+
+*}
 {$mode objfpc}{$H+}
 
 uses
@@ -98,7 +110,11 @@ begin
     offset := vPage * PageSize;
     writeln('Offset: ' + IntToStr(offset));
     aFile.Seek(offset, soBeginning);
-    for i := 0 to PageSize - 1 do
+    aFile.WriteByte($07);
+    aFile.WriteByte($01);
+    aFile.WriteByte($39);
+    aFile.WriteByte($30);
+    for i := 4 to PageSize - 1 do
       aFile.WriteByte(0);
   finally
     aFile.Free;
