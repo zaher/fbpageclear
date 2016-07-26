@@ -82,7 +82,8 @@ begin
   end;
 
   ClearPage(aFileName, StrToInt64(aPage));
-  ReadLn();
+  Writeln('Done.');
+  //ReadLn();
   Terminate;
 end;
 
@@ -95,6 +96,7 @@ begin
   aFile := TFileStream.Create(vFileName, fmOpenReadWrite);
   try
     offset := vPage * PageSize;
+    writeln('Offset: ' + IntToStr(offset));
     aFile.Seek(offset, soBeginning);
     for i := 0 to PageSize - 1 do
       aFile.WriteByte(0);
