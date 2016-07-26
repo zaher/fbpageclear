@@ -11,6 +11,11 @@ Page Size:4096
 Offset: 150786048
 Done.
 
+
+>fbpageclear d:\temp\data.fdb -s -f
+
+isql>connect d:\temp\data.fdb user SYSDBA password masterkey;
+
 *}
 {$mode objfpc}{$H+}
 
@@ -22,7 +27,7 @@ uses
   { you can add units after this };
 
 type
-
+  //36516
   { TFBPageClear }
 
   TFBPageClear = class(TCustomApplication)
@@ -33,6 +38,7 @@ type
     procedure ClearPage(vPage: Int64);
     procedure ClearPage(aFile: TFileStream; vPage: Int64);
     procedure ScanPages(Fix: Boolean; All: Boolean = True);
+    procedure Truncate(vPage: Int64);
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -82,6 +88,19 @@ begin
       begin
         ScanPages(HasOption('f', 'fix'));
       end
+      else if HasOption('t', 'trunc') then
+      begin
+        if aParams.Count > 1 then
+          aPage := aParams[1]
+        else
+        begin
+          WriteLn('Please define the page number.');
+          WriteHelp;
+          Terminate;
+          Exit;
+        end;
+        Truncate(StrToInt(aPage));
+      end
       else
       begin
         if aParams.Count > 1 then
@@ -90,6 +109,8 @@ begin
         begin
           WriteLn('Please define the page number.');
           WriteHelp;
+          Terminate;
+          Exit;
         end;
         WriteLn('Page Size:' + IntToStr(PageSize));
         ClearPage(StrToInt64(aPage));
@@ -143,7 +164,6 @@ var
   PageHeader: TPageHeader;
 begin
   offset := vPage * PageSize;
-  writeln('Offset: ' + IntToStr(offset));
   aFile.Seek(offset, soBeginning);
   Finalize(PageHeader);
 
@@ -192,6 +212,23 @@ begin
       Writeln('No Errors found.')
     else
       Writeln('Errors found check it!');
+  finally
+    aFile.Free;
+  end;
+end;
+
+procedure TFBPageClear.Truncate(vPage: Int64);
+var
+  aFile:TFileStream;
+  offset: Int64;
+  i: Integer;
+begin
+  aFile := TFileStream.Create(FileName, fmOpenReadWrite);
+  try
+    offset := vPage * PageSize;
+    writeln('Offset: ' + IntToStr(offset));
+    //aFile.Seek(offset, soBeginning);
+    aFile.Size := offset;
   finally
     aFile.Free;
   end;
