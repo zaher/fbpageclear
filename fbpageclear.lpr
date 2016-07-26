@@ -28,8 +28,11 @@ type
   TFBPageClear = class(TCustomApplication)
   protected
     PageSize: Integer;
+    FileName: string;
     procedure DoRun; override;
-    procedure ClearPage(vFileName: string; vPage: Int64);
+    procedure ClearPage(vPage: Int64);
+    procedure ClearPage(aFile: TFileStream; vPage: Int64);
+    procedure ScanPages(Fix: Boolean; All: Boolean = True);
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -40,72 +43,84 @@ type
 
 procedure TFBPageClear.DoRun;
 var
-  ErrorMsg: String;
   aParams: TStringList;
-  aFileName, aPage: string;
+  aPage: string;
 begin
   PageSize := 4096;
 
-  ErrorMsg := CheckOptions('h', 'help');
+  {ErrorMsg := CheckOptions('h', 'help');
   if ErrorMsg <>'' then
   begin
     ShowException(Exception.Create(ErrorMsg));
     Terminate;
     Exit;
-  end;
+  end;}
 
   if HasOption('h', 'help') or (ParamCount = 0) then
+    WriteHelp
+  else
   begin
-    WriteHelp;
-    Terminate;
-    Exit;
+    aParams:=TStringList.Create;
+    try
+      CheckOptions('', nil, nil, aParams, False);
+      if aParams.Count > 0 then
+        FileName := aParams[0]
+      else
+      begin
+        WriteLn('Please define the file name.');
+        WriteHelp;
+      end;
+
+      if HasOption('p', 'page') then
+      begin
+        PageSize := StrToInt(GetOptionValue('p', 'page'));
+      end;
+
+      WriteLn(FileName + ' ' + IntToStr(PageSize));
+
+      if HasOption('s', 'scan') then
+      begin
+        ScanPages(HasOption('f', 'fix'));
+      end
+      else
+      begin
+        if aParams.Count > 1 then
+          aPage := aParams[1]
+        else
+        begin
+          WriteLn('Please define the page number.');
+          WriteHelp;
+        end;
+        WriteLn('Page Size:' + IntToStr(PageSize));
+        ClearPage(StrToInt64(aPage));
+        Writeln('Done.');
+      end;
+    finally
+      aParams.Free;
+    end;
   end;
 
-  aParams:=TStringList.Create;
-  try
-    CheckOptions('', nil, nil, aParams, False);
-
-    if aParams.Count > 0 then
-      aFileName := aParams[0]
-    else
-    begin
-      WriteLn('Please define the file name.');
-      WriteHelp;
-    end;
-
-    if aParams.Count > 1 then
-      aPage := aParams[1]
-    else
-    begin
-      WriteLn('Please define the page number.');
-      WriteHelp;
-    end;
-
-    WriteLn(aFileName + ' ' + aPage);
-
-    if HasOption('p', 'page') then
-    begin
-      PageSize := StrToInt(GetOptionValue('p', 'page'));
-    end;
-    WriteLn('Page Size:' + IntToStr(PageSize));
-
-  finally
-    aParams.Free;
-  end;
-
-  ClearPage(aFileName, StrToInt64(aPage));
-  Writeln('Done.');
   //ReadLn();
   Terminate;
 end;
 
-procedure TFBPageClear.ClearPage(vFileName: string; vPage: Int64);
+type
+  TPageHeader = packed record
+    PageType: Byte;
+    Flag: Byte;
+    CheckSum: Word;
+  end;
+
+const
+  sCheckSum = 12345;
+
+procedure TFBPageClear.ClearPage(vPage: Int64);
 var
   aFile:TFileStream;
   offset: Int64;
   i: Integer;
 begin
-  aFile := TFileStream.Create(vFileName, fmOpenReadWrite);
+  aFile := TFileStream.Create(FileName, fmOpenReadWrite);
   try
     offset := vPage * PageSize;
     writeln('Offset: ' + IntToStr(offset));
@@ -116,6 +131,67 @@ begin
     aFile.WriteByte($30);
     for i := 4 to PageSize - 1 do
       aFile.WriteByte(0);
+  finally
+    aFile.Free;
+  end;
+end;
+
+procedure TFBPageClear.ClearPage(aFile: TFileStream; vPage: Int64);
+var
+  offset: Int64;
+  i: Integer;
+  PageHeader: TPageHeader;
+begin
+  offset := vPage * PageSize;
+  writeln('Offset: ' + IntToStr(offset));
+  aFile.Seek(offset, soBeginning);
+  Finalize(PageHeader);
+
+  PageHeader.CheckSum := sCheckSum;
+  PageHeader.Flag := 1;
+  PageHeader.PageType := 0;
+
+  aFile.WriteBuffer(PageHeader, SizeOf(PageHeader));
+  for i := SizeOf(PageHeader) to PageSize - 1 do
+    aFile.WriteByte(0);
+  WriteLn('Page: '+ IntToStr(vPage) + ' is fixed');
+end;
+
+procedure TFBPageClear.ScanPages(Fix: Boolean; All: Boolean);
+var
+  aFile:TFileStream;
+  size, offset: Int64;
+  p: Int64;
+  PageHeader: TPageHeader;
+  FoundErrors: Integer;
+begin
+  Writeln('Scanning...');
+  aFile := TFileStream.Create(FileName, fmOpenReadWrite);
+  try
+    Finalize(PageHeader);
+    FoundErrors := 0;
+    size := aFile.Size;
+    p := 0;
+    offset := p * PageSize;
+    while (offset < size) and (not Terminated) do
+    begin
+      Write('Checked '+ InttoStr(p)+#13);
+      aFile.Seek(offset, soBeginning);
+      aFile.ReadBuffer(PageHeader, SizeOf(PageHeader));
+      if PageHeader.CheckSum <> sCheckSum then
+      begin
+        Writeln('Page CheckSum Error: ' + IntToStr(p)+ ' CheckSum: ' + IntToStr(PageHeader.CheckSum));
+        Inc(FoundErrors);
+        ClearPage(aFile, p);
+      end;
+      inc(p);
+      offset := p * PageSize;
+      //if p> 10 then  exit;
+    end;
+    if FoundErrors = 0  then
+      Writeln('No Errors found.')
+    else
+      Writeln('Errors found check it!');
   finally
     aFile.Free;
   end;

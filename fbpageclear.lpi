@@ -25,7 +25,7 @@
     <RunParams>
       <local>
         <FormatVersion Value="1"/>
-        <CommandLineParams Value="test.data 1"/>
+        <CommandLineParams Value="d:\temp\data.fdb -s"/>
       </local>
     </RunParams>
     <Units Count="1">
